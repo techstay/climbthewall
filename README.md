@@ -47,5 +47,5 @@ bash wg.sh
 pip install qrcode[pil]
 
 # 生成二维码
-cat client.conf|qr wireguar-client.png
+cat client.conf|qr > client.png
 ```
