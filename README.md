@@ -49,3 +49,27 @@ pip install qrcode[pil]
 # 生成二维码
 cat client.conf|qr > client.png
 ```
+
+## gost_ss
+
+利用gost工具生成影梭和kcp的服务端工具。
+
+首先确保你已经安装并启动了docker服务。
+
+```shell script
+# Ubuntu 18.04
+sudo apt install docker.io
+sudo systemctl enable docker
+sudo systemctl start docker
+```
+
+然后下载`gost_ss.sh`脚本并运行，该脚本需要两个或三个参数，前两个参数分别是影梭的密码和端口号；第三个参数是kcp的mode，不指定的话启动影梭，指定了的话使用影梭+kcp。mode的可选值有fast,fast2和fast3，如果是自用的VPS而且流量充足，直接指定fast3来获得最高的加速效果。
+
+```shell script
+wget https://raw.githubusercontent.com/techstay/climbthewall/master/gost_ss.sh
+# 启动影梭服务，脚本会显示相应的客户端配置文件，请记下来
+bash gost_ss.sh 123456 10086
+# 启动影梭和kcp加速，客户端需要安装kcp
+bash gost_ss.sh 123456 10086 fast3
+```
+
