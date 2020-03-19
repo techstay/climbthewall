@@ -64,6 +64,7 @@ sudo systemctl start docker
 ```
 
 脚本直接使用了docker命令，所以为了顺利运行，你还需要允许docker命令以非管理员权限方式来运行。
+
 ```shell script
 sudo gpasswd docker -a $(whoami)
 sudo systemctl restart docker
@@ -79,7 +80,7 @@ docker run --rm hello-world
 
 ```shell script
 # 下载脚本
-wget https://raw.githubusercontent.com/techstay/climbthewall/master/gost_ss.sh
+wget https://raw.githubusercontent.com/techstay/climbthewall/master/gost_ss.py
 
 # 用python运行脚本
 python gost_ss.py -h
