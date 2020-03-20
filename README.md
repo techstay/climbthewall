@@ -40,15 +40,7 @@ bash wg.sh
 
 到[wireguard官网](https://www.wireguard.com/install/)下载客户端，将上面生成的客户端配置文件保存，导入客户端即可。
 
-手机客户端使用时，可以从`client.conf`生成二维码。
-
-```sh
-# 使用Python生成二维码，首先安装qrcode
-pip install qrcode[pil]
-
-# 生成二维码
-cat client.conf|qr > client.png
-```
+手机客户端使用时，可以脚本生成的二维码。
 
 ## gost_ss
 

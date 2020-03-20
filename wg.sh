@@ -46,14 +46,20 @@ EOL
 
 # 复制配置文件并启动
 sudo cp wg0.conf /etc/wireguard/ || {
-    echo 复制失败,请检查/etc/wireguard目录或wg0.conf是否已经存在
+    echo 复制失败,请检查/etc/wireguard目录或wg0.conf是否存在
     exit
 }
-sudo wg-quick up wg0 || {
+sudo systemctl start wg-quick@wg0 || {
     echo 启动wireguard失败，请检查/etc/wireguard/wg0.conf是否存在错误
     exit
 }
 
+sudo systemctl enable wg-quick@wg0
+
 # 显示客户端配置文件
 echo "----------以下是客户端配置文件，请保存并在客户端中使用----------"
 cat client.conf
+
+echo "----------以下是客户端配置二维码----------"
+echo "qrencode -t ansiutf8 <~/.wireguard/client.conf   再次显示"
+qrencode -t ansiutf8 <client.conf
