@@ -1,20 +1,21 @@
 #! /usr/bin/env python
 
 import argparse
-import subprocess
-import pathlib
-import urllib.request
-import secrets
-import string
 import base64
-import json
+import ipaddress
+import pathlib
+import secrets
 import socket
+import string
+import subprocess
+import urllib.error
+import urllib.request
 
 
 class SystemUtils:
     @staticmethod
     def create_file(fullpath, filecontent):
-        file = pathlib.Path(fullpath).resolve().expanduser()
+        file = pathlib.Path(fullpath).expanduser()
         parentdir = file.parent
         if not parentdir.exists():
             parentdir.mkdir(parents=True, exist_ok=True)
@@ -31,12 +32,22 @@ class SystemUtils:
         return exist
 
     @staticmethod
-    def get_local_ip():
-        request = urllib.request.Request('http://httpbin.org/ip')
-        response = urllib.request.urlopen(request)
-        ip = json.loads(response.read().decode())['origin']
-        socket.inet_aton(ip)
+    def get_ip():
+        response = urllib.request.urlopen('https://ipv4.icanhazip.com')
+        ip = response.read().decode().strip()
+        ipaddress.ip_address(ip)
         return ip
+
+    @staticmethod
+    def get_ip6():
+        """如果不存在ipv6地址，返回None"""
+        try:
+            response = urllib.request.urlopen('https://ipv6.icanhazip.com')
+            ip = response.read().decode().strip()
+            ipaddress.ip_address(ip)
+            return ip
+        except urllib.error.URLError:
+            return None
 
 
 class RandomUtils:
@@ -49,23 +60,27 @@ class RandomUtils:
 
     @staticmethod
     def get_random_port():
-        """Get an unused port"""
+        """获取一个随机端口号，绑定0让操作系统来随机分配"""
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind(('', 0))
             return s.getsockname()[1]
 
 
-class DockerUtils:
+class RunDocker:
     @staticmethod
     def run_gost_ss(password, port):
         try:
-            subprocess.run(
-                rf'docker run --name gost{port} -d --net=host --restart=always ginuerzh/gost -L=ss://AEAD_CHACHA20_POLY1305:{password}@:{port} '
-                    .split(' '), check=True, stderr=subprocess.STDOUT)
+            cmd = rf'''docker run --name gost{port} \
+            -d --net=host --restart=always \
+            ginuerzh/gost \
+            -L=ss://AEAD_CHACHA20_POLY1305:{password}@:{port}                        
+'''
+            subprocess.run(cmd, shell=True, check=True,
+                           stderr=subprocess.STDOUT)
             print('----------以下是shadowsocks-libev客户端配置文件----------')
             print(rf'''
 {{
-    "server":["{SystemUtils.get_local_ip()}"],
+    "server":["{SystemUtils.get_ip()}"],
     "server_port":{port},
     "local_port":10800,
     "password":"{password}",
@@ -75,15 +90,17 @@ class DockerUtils:
 ''')
             print('-------------以下是docker gost客户端配置命令---------------')
             print(rf'''
-docker run -d --name gostproxy \
+docker run -d --name gostproxy{port} \
   --restart=always --net=host \
   ginuerzh/gost -L=:10800 \
-  '-F=ss://AEAD_CHACHA20_POLY1305:{password}@{SystemUtils.get_local_ip()}:{port}'
+  '-F=ss://AEAD_CHACHA20_POLY1305:{password}@{SystemUtils.get_ip()}:{port}'
 ''')
 
             print('---------------以下是shadowsocks配置字符串，可用于手机端等------------------')
-            userinfo = base64.urlsafe_b64encode(rf'chacha20-ietf-poly1305:{password}'.encode('utf8')).decode('utf8')
-            print(rf'ss://{userinfo}@{SystemUtils.get_local_ip()}:{port}')
+            # base64编码和解码返回的都是bytes，所以需要转换一下
+            userinfo = base64.urlsafe_b64encode(
+                rf'chacha20-ietf-poly1305:{password}'.encode('utf8')).decode('utf8')
+            print(rf'ss://{userinfo}@{SystemUtils.get_ip()}:{port}')
         except subprocess.CalledProcessError as e:
             print(e.output)
 
@@ -116,10 +133,14 @@ docker run -d --name gostproxy \
 
         kcp_file_path = str(SystemUtils.create_file(kcp_file, kcp_config))
         try:
-            subprocess.run(
-                rf'docker run --name gost{port} -d --net=host --restart=always -v {kcp_file_path}:/kcp.json '
-                rf'ginuerzh/gost -L=ss+kcp://AEAD_CHACHA20_POLY1305:{password}@:{port}?c=/kcp.json'
-                    .split(' '), check=True, stderr=subprocess.STDOUT)
+            cmd = rf'''docker run --name gost{port} -d \
+            --net=host --restart=always \
+            -v {kcp_file_path}:/kcp.json \
+            ginuerzh/gost \
+            -L=ss+kcp://AEAD_CHACHA20_POLY1305:{password}@:{port}?c=/kcp.json
+'''
+            subprocess.run(cmd, shell=True, check=True,
+                           stderr=subprocess.STDOUT)
 
             print('-------------以下是docker gost客户端配置命令---------------')
             print(rf'''
@@ -148,16 +169,18 @@ tee ~/.kcp/kcp{port}.json <<EOL
     "tcp": false
 }}
 EOL
-docker run -d --name gostproxy \
+docker run -d --name gostproxy{port} \
   --restart=always --net=host \
   -v ~/.kcp/kcp{port}.json:/kcp.json \
   ginuerzh/gost -L=:10800 \
-  '-F=ss+kcp://AEAD_CHACHA20_POLY1305:{password}@{SystemUtils.get_local_ip()}:{port}?c=/kcp.json'
+  '-F=ss+kcp://AEAD_CHACHA20_POLY1305:{password}@{SystemUtils.get_ip()}:{port}?c=/kcp.json'
 ''')
 
             print('---------------以下是shadowsocks配置字符串，可用于手机端等------------------')
-            userinfo = base64.urlsafe_b64encode(rf'chacha20-ietf-poly1305:{password}'.encode('utf8')).decode('utf8')
-            print(rf'ss://{userinfo}@{SystemUtils.get_local_ip()}:{port}/?plugin=kcptun;mode={mode}')
+            userinfo = base64.urlsafe_b64encode(
+                rf'chacha20-ietf-poly1305:{password}'.encode('utf8')).decode('utf8')
+            print(
+                rf'ss://{userinfo}@{SystemUtils.get_ip()}:{port}/?plugin=kcptun;mode={mode}')
         except subprocess.CalledProcessError as e:
             print(e.output)
 
@@ -174,16 +197,17 @@ class GostSs:
                                  help='端口号，未指定则使用随机端口号')
         group = self.parser.add_argument_group('kcp')
 
-        group.add_argument('-k', dest='kcp', action='store_true', help='是否使用kcp协议加速')
+        group.add_argument(
+            '-k', dest='kcp', action='store_true', help='是否使用kcp协议加速')
         group.add_argument('-mode', choices=['fast', 'fast2', 'fast3'], default='fast',
                            help='kcp协议的加速模式，流量充足可使用fast3')
 
     def run(self):
         args = self.parser.parse_args()
         if args.kcp:
-            DockerUtils.run_gost_ss_kcp(args.password, args.port, args.mode)
+            RunDocker.run_gost_ss_kcp(args.password, args.port, args.mode)
         else:
-            DockerUtils.run_gost_ss(args.password, args.port)
+            RunDocker.run_gost_ss(args.password, args.port)
 
 
 if __name__ == '__main__':
